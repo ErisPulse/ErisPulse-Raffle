@@ -1,0 +1,113 @@
+# ErisPulse-Raffle
+
+通用抽奖模块 - 基于 ErisPulse Dashboard 可视化管理，支持群聊关键词报名、开奖动画、广播通知。
+
+## 功能
+
+- **Dashboard 管理** - 可视化创建/编辑活动、管理参与者、黑白名单、一键开奖
+- **关键词报名** - 用户在群聊中发送指定关键词即可参与，无需 @机器人
+- **多平台支持** - 通过适配器同时支持云湖、Telegram、OneBot 等平台
+- **开奖撤回** - 开奖后可撤回结果，恢复为报名中状态
+- **活动通知** - 从 Dashboard 向任意平台/会话发送活动开始通知（支持多目标批量发送）
+- **开奖广播** - 开奖后自动向所有关联群聊广播结果
+- **富文本降级** - `/raffle` 命令根据平台能力自动选择 Html / Markdown / 纯文本
+- **模板自定义** - 所有回复消息（报名、广播、通知等）均可自定义
+
+## 安装
+
+```bash
+epsdk install Raffle
+```
+
+## 使用
+
+### 群聊报名
+
+用户在已关联的群聊中发送活动关键词即可自动报名：
+
+```
+抽奖          # 发送配置的关键词即可参与
+```
+
+### 查看活动
+
+```
+/raffle       # 查看自己已参与的活动 + 当前群聊的活动
+/活动          # 同上，中文别名
+```
+
+### Dashboard 管理
+
+安装 [ErisPulse-Dashboard](https://pypi.org/project/ErisPulse-Dashboard/) 后，在侧边栏「工具」分组中找到「抽奖管理」。
+
+## 活动配置项
+
+| 配置 | 说明 |
+|------|------|
+| 活动 ID | 唯一标识，留空自动生成 |
+| 活动名称 | 显示名称 |
+| 活动描述 | 简短描述 |
+| 开奖人数 | 抽取的中奖者数量 |
+| 触发关键词 | 逗号分隔，用户发送包含关键词的消息即视为报名 |
+| 自动确认参与 | 开启后跳过「待录入」状态，直接加入已确认组 |
+| 白名单模式 | 仅白名单中的用户可以参与 |
+| 允许的群聊 | 指定哪些平台/群聊可以参与本次活动 |
+
+## 通知功能
+
+在 Dashboard 中点击活动旁的铃铛按钮，可向指定目标发送活动通知：
+
+- 选择平台、会话类型（私聊/群聊/频道/服务器/话题）、目标 ID
+- 可选指定机器人账号（多 Bot 场景）
+- 支持添加自定义备注内容（追加到模板末尾）
+- 支持多目标批量发送
+- 发送历史记录 + 一键重发
+
+## 回复模板
+
+所有回复消息均可在 Dashboard「回复模板」区域自定义：
+
+| 模板 | 触发场景 | 变量 |
+|------|---------|------|
+| 报名成功 | 用户首次成功报名 | `{name}`, `{count}`, `{activity_name}` |
+| 已报名提示 | 用户重复报名 | `{name}` |
+| 待确认提示 | 手动确认模式下报名 | `{name}` |
+| 开奖广播 | 开奖后广播到关联群聊 | `{activity_name}`, `{winner_names}`, `{winner_count}`, `{total_participants}` |
+| 活动通知 | 从 Dashboard 发送通知 | `{activity_name}`, `{description}`, `{draw_count}`, `{keywords}` |
+| 黑名单拦截 | 黑名单用户尝试报名 | - |
+| 非白名单拦截 | 白名单模式下非白名单用户尝试 | - |
+
+## 界面
+
+![alt text](.github/view.png)
+
+## API
+
+模块注册以下 HTTP API（需 Dashboard Token 认证）：
+
+| 路由 | 方法 | 说明 |
+|------|------|------|
+| `/Raffle/api/platforms` | GET | 获取已注册平台列表 |
+| `/Raffle/api/settings` | GET/PUT | 读取/更新模块设置 |
+| `/Raffle/api/activities` | GET/POST | 列出/创建活动 |
+| `/Raffle/api/activities/{id}` | GET/PUT/DELETE | 查看/更新/删除活动 |
+| `/Raffle/api/activities/{id}/participants` | GET | 获取参与者列表 |
+| `/Raffle/api/activities/{id}/participants/{uid}` | PUT/DELETE | 确认/撤回/移除参与者 |
+| `/Raffle/api/activities/{id}/draw` | POST | 开奖 |
+| `/Raffle/api/activities/{id}/draw/revert` | POST | 撤回开奖 |
+| `/Raffle/api/activities/{id}/result` | GET | 获取开奖结果 |
+| `/Raffle/api/activities/{id}/blacklist` | GET/PUT | 黑名单管理 |
+| `/Raffle/api/activities/{id}/whitelist` | GET/PUT | 白名单管理 |
+| `/Raffle/api/activities/{id}/notify` | POST | 发送活动通知 |
+| `/Raffle/api/activities/{id}/notify/history` | GET | 获取通知发送历史 |
+| `/Raffle/api/activities/{id}/notify/resend/{hid}` | POST | 重发通知 |
+
+## 命令
+
+| 命令 | 别名 | 说明 |
+|------|------|------|
+| `/raffle` | `/活动` | 查看已参与的活动和当前群聊的活动 |
+
+## 许可证
+
+MIT
