@@ -1,0 +1,23 @@
+[project]
+name = "ErisPulse-Raffle"
+version = "1.0.0"
+description = "通用抽奖模块 - 使用 Dashboard 可视化管理、群聊报名、开奖动画和广播通知"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ErisPulse" }]
+dependencies = [
+]
+
+[project.urls]
+homepage = "https://github.com/ErisPulse/ErisPulse-Raffle"
+
+[project.entry-points."erispulse.module"]
+"Raffle" = "Raffle:Main"
+
+[tool.setuptools.package-data]
+"Raffle" = ["templates/**/*"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

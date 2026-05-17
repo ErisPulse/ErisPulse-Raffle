@@ -1,0 +1,295 @@
+<h1 class="page-title">抽奖管理</h1>
+<p class="page-desc" style="margin-bottom:20px">创建和管理抽奖活动，查看参与者名单，一键开奖</p>
+
+<div class="raffle-grid-4" style="margin-bottom:24px">
+    <div class="card">
+        <div class="card-body" style="text-align:center">
+            <div id="rf-stat-current" style="font-size:14px;font-weight:600;margin-bottom:4px">--</div>
+            <div style="font-size:12px;color:var(--tx-s)">当前活动</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body" style="text-align:center">
+            <div id="rf-stat-confirmed" style="font-size:24px;font-weight:700;color:var(--accent)">0</div>
+            <div style="font-size:12px;color:var(--tx-s)">已确认</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body" style="text-align:center">
+            <div id="rf-stat-draw" style="font-size:24px;font-weight:700;color:var(--pr-c)">0</div>
+            <div style="font-size:12px;color:var(--tx-s)">开奖人数</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body" style="text-align:center">
+            <div id="rf-stat-status" style="font-size:16px;font-weight:600">--</div>
+            <div style="font-size:12px;color:var(--tx-s)">活动状态</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid-2" style="margin-bottom:20px">
+    <div class="card">
+        <div class="card-header">
+            <span>活动列表</span>
+            <button class="btn btn-primary btn-sm" onclick="rfShowCreate()">+ 创建活动</button>
+        </div>
+        <div class="card-body">
+            <div id="rf-activity-list" style="font-size:14px;color:var(--tx-s)">加载中...</div>
+        </div>
+    </div>
+
+    <div class="card" id="rf-create-panel" style="display:none">
+        <div class="card-header">
+            <span id="rf-create-title">创建新活动</span>
+            <button class="btn btn-secondary btn-sm" onclick="rfHideCreate()">取消</button>
+        </div>
+        <div class="card-body">
+            <div class="rf-form-group">
+                <label class="rf-label">活动 ID</label>
+                <input type="text" id="rf-f-id" class="form-input" placeholder="如: 100rc (留空自动生成)" style="width:100%">
+            </div>
+            <div class="rf-form-group">
+                <label class="rf-label">活动名称</label>
+                <input type="text" id="rf-f-name" class="form-input" placeholder="如: 社区纪念周边抽奖" style="width:100%">
+            </div>
+            <div class="rf-form-group">
+                <label class="rf-label">活动描述</label>
+                <input type="text" id="rf-f-desc" class="form-input" placeholder="简短描述活动内容" style="width:100%">
+            </div>
+            <div class="rf-form-group">
+                <label class="rf-label">开奖人数</label>
+                <input type="number" id="rf-f-draw" class="form-input" value="5" min="1" style="width:120px">
+            </div>
+            <div class="rf-form-group">
+                <label class="rf-label">触发关键词 <span style="color:var(--tx-t);font-weight:400">(逗号分隔)</span></label>
+                <input type="text" id="rf-f-keywords" class="form-input" placeholder="我想要礼物,想要礼物,参与抽奖" style="width:100%">
+            </div>
+            <div class="rf-form-group">
+                <label class="rf-label">自动确认参与 <span style="color:var(--tx-t);font-weight:400">(跳过待录入直接加入参与组)</span></label>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <label class="rf-switch"><input type="checkbox" id="rf-f-autoconfirm"><span class="rf-switch-slider"></span></label>
+                    <span id="rf-f-autoconfirm-label" style="font-size:13px;color:var(--tx-s)">关闭</span>
+                </div>
+            </div>
+            <div class="rf-form-group">
+                <label class="rf-label">白名单模式 <span style="color:var(--tx-t);font-weight:400">(仅白名单用户可参与)</span></label>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <label class="rf-switch"><input type="checkbox" id="rf-f-whitelist"><span class="rf-switch-slider"></span></label>
+                    <span id="rf-f-whitelist-label" style="font-size:13px;color:var(--tx-s)">关闭</span>
+                </div>
+            </div>
+            <div class="rf-form-group">
+                <label class="rf-label">允许的群聊</label>
+                <div style="display:flex;gap:8px;margin-bottom:8px">
+                    <select id="rf-f-platform" class="form-select" style="width:140px">
+                        <option value="">选择平台</option>
+                    </select>
+                    <input type="text" id="rf-f-groupid" class="form-input" placeholder="群聊 ID" style="flex:1">
+                    <button class="btn btn-secondary btn-sm" onclick="rfAddGroup()">添加</button>
+                </div>
+                <div id="rf-groups-list"></div>
+            </div>
+            <div style="margin-top:12px">
+                <button class="btn btn-primary" onclick="rfSaveActivity()">保存活动</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:20px" id="rf-participants-card">
+    <div class="card-header">
+        <span>参与者名单 <span id="rf-participant-count" style="color:var(--tx-t);font-weight:400"></span></span>
+        <div style="display:flex;gap:8px;align-items:center">
+            <div class="rf-tab-group" id="rf-group-tabs">
+                <button class="rf-tab rf-tab-active" onclick="rfSwitchGroup('all')" data-group="all">全部</button>
+                <button class="rf-tab" onclick="rfSwitchGroup('confirmed')" data-group="confirmed">已确认</button>
+                <button class="rf-tab" onclick="rfSwitchGroup('pending')" data-group="pending">待录入</button>
+            </div>
+            <input type="text" id="rf-search" class="form-input" placeholder="搜索..." style="width:160px;display:inline-block" oninput="rfFilterParticipants()">
+        </div>
+    </div>
+    <div class="card-body">
+        <div id="rf-participants-empty" style="text-align:center;padding:24px;color:var(--tx-t)">请先选择一个活动</div>
+        <table id="rf-participants-table" class="rf-table" style="display:none;width:100%">
+            <thead>
+                <tr>
+                    <th style="width:40px">#</th>
+                    <th>昵称</th>
+                    <th>用户 ID</th>
+                    <th>平台</th>
+                    <th>分组</th>
+                    <th>加入时间</th>
+                    <th style="width:140px">操作</th>
+                </tr>
+            </thead>
+            <tbody id="rf-participants-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="grid-2" style="margin-bottom:20px">
+    <div class="card">
+        <div class="card-header">
+            <span>开奖</span>
+        </div>
+        <div class="card-body">
+            <div id="rf-draw-idle">
+                <p style="color:var(--tx-s);margin-bottom:12px">选择活动后，点击开奖按钮随机从「已确认」参与者中抽取获奖者</p>
+                <button class="btn btn-primary" id="rf-draw-btn" onclick="rfStartDraw()" disabled>开奖</button>
+                <button class="btn btn-secondary" id="rf-draw-result-btn" onclick="rfShowResult()" style="display:none">查看结果</button>
+                <button class="btn btn-danger btn-sm" id="rf-draw-revert-btn" onclick="rfRevertDraw()" style="display:none">撤回开奖</button>
+            </div>
+            <div id="rf-draw-animating" style="display:none;text-align:center;padding:32px">
+                <div id="rf-draw-slot" class="rf-draw-slot">???</div>
+                <p style="margin-top:12px;color:var(--tx-s)">正在抽取中...</p>
+            </div>
+            <div id="rf-draw-done" style="display:none">
+                <div style="text-align:center;margin-bottom:16px">
+                    <h3 style="color:var(--ok-c);margin-bottom:8px">抽奖结果</h3>
+                    <p id="rf-draw-summary" style="color:var(--tx-s)"></p>
+                </div>
+                <div id="rf-winners-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span>名单管理</span>
+        </div>
+        <div class="card-body">
+            <div class="rf-form-group">
+                <label class="rf-label">黑名单 <span style="color:var(--tx-t);font-weight:400">(被加入的用户无法参与)</span></label>
+                <div style="display:flex;gap:8px;margin-bottom:8px">
+                    <input type="text" id="rf-bl-input" class="form-input" placeholder="输入用户 ID" style="flex:1">
+                    <input type="text" id="rf-bl-name" class="form-input" placeholder="备注名(可选)" style="width:120px">
+                    <button class="btn btn-secondary btn-sm" onclick="rfAddBlacklist()">添加</button>
+                </div>
+                <div id="rf-blacklist-tags"></div>
+            </div>
+            <div class="rf-form-group" style="margin-top:16px">
+                <label class="rf-label">白名单 <span style="color:var(--tx-t);font-weight:400">(白名单模式下仅这些用户可参与)</span></label>
+                <div style="display:flex;gap:8px;margin-bottom:8px">
+                    <input type="text" id="rf-wl-input" class="form-input" placeholder="输入用户 ID" style="flex:1">
+                    <input type="text" id="rf-wl-name" class="form-input" placeholder="备注名(可选)" style="width:120px">
+                    <button class="btn btn-secondary btn-sm" onclick="rfAddWhitelist()">添加</button>
+                </div>
+                <div id="rf-whitelist-tags"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span>回复模板</span>
+    </div>
+    <div class="card-body">
+        <div class="grid-2">
+            <div>
+                <div class="rf-form-group">
+                    <label class="rf-label">报名成功 <span style="color:var(--tx-t);font-weight:400">变量: {name}, {count}, {activity_name}</span></label>
+                    <textarea id="rf-tpl-success" class="form-input" rows="3" style="width:100%;resize:vertical"></textarea>
+                </div>
+                <div class="rf-form-group">
+                    <label class="rf-label">已报名提示 <span style="color:var(--tx-t);font-weight:400">变量: {name}</span></label>
+                    <textarea id="rf-tpl-joined" class="form-input" rows="2" style="width:100%;resize:vertical"></textarea>
+                </div>
+                <div class="rf-form-group">
+                    <label class="rf-label">待确认提示 <span style="color:var(--tx-t);font-weight:400">变量: {name}</span></label>
+                    <textarea id="rf-tpl-pending" class="form-input" rows="2" style="width:100%;resize:vertical"></textarea>
+                </div>
+            </div>
+            <div>
+                <div class="rf-form-group">
+                    <label class="rf-label">引导提示</label>
+                    <textarea id="rf-tpl-hint" class="form-input" rows="2" style="width:100%;resize:vertical"></textarea>
+                </div>
+                <div class="rf-form-group">
+                    <label class="rf-label">无活动提示</label>
+                    <textarea id="rf-tpl-noactivity" class="form-input" rows="1" style="width:100%;resize:vertical"></textarea>
+                </div>
+                <div class="rf-form-group">
+                    <label class="rf-label">被黑名单拦截</label>
+                    <textarea id="rf-tpl-blacklisted" class="form-input" rows="1" style="width:100%;resize:vertical"></textarea>
+                </div>
+                <div class="rf-form-group">
+                    <label class="rf-label">非白名单拦截</label>
+                    <textarea id="rf-tpl-notwhitelist" class="form-input" rows="1" style="width:100%;resize:vertical"></textarea>
+                </div>
+            </div>
+        </div>
+        <div style="margin-top:16px">
+            <div class="rf-form-group">
+                <label class="rf-label">活动通知模板 <span style="color:var(--tx-t);font-weight:400">变量: {activity_name}, {description}, {draw_count}, {keywords}</span></label>
+                <textarea id="rf-tpl-notify" class="form-input" rows="4" style="width:100%;resize:vertical"></textarea>
+            </div>
+            <div class="rf-form-group">
+                <label class="rf-label">开奖广播模板 <span style="color:var(--tx-t);font-weight:400">变量: {activity_name}, {winner_names}, {winner_count}, {total_participants}</span></label>
+                <textarea id="rf-tpl-broadcast" class="form-input" rows="3" style="width:100%;resize:vertical"></textarea>
+            </div>
+        </div>
+        <div style="margin-top:12px">
+            <button class="btn btn-primary" onclick="rfSaveTemplates()">保存模板</button>
+        </div>
+    </div>
+</div>
+
+<div id="rf-notify-modal" class="rf-modal" style="display:none">
+    <div class="rf-modal-overlay" onclick="rfHideNotify()"></div>
+    <div class="rf-modal-box">
+        <div class="rf-modal-header">
+            <span>发送活动通知</span>
+            <button class="btn btn-icon" onclick="rfHideNotify()" style="font-size:20px;padding:0 4px;line-height:1">×</button>
+        </div>
+        <div class="rf-modal-tabs">
+            <button class="rf-tab rf-tab-active" onclick="rfNotifyTab('send')" data-ntab="send">发送通知</button>
+            <button class="rf-tab" onclick="rfNotifyTab('history')" data-ntab="history">发送历史</button>
+        </div>
+        <div class="rf-modal-body">
+            <div id="rf-notify-send">
+                <div style="margin-bottom:12px">
+                    <div style="font-size:14px;font-weight:600;margin-bottom:4px" id="rf-notify-act-name">--</div>
+                    <div style="font-size:12px;color:var(--tx-t)" id="rf-notify-act-desc"></div>
+                </div>
+                <div class="rf-form-group">
+                    <label class="rf-label">发送目标</label>
+                    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+                        <select id="rf-nf-platform" class="form-select" style="width:120px;font-size:13px;padding:4px 8px">
+                            <option value="">平台</option>
+                        </select>
+                        <select id="rf-nf-type" class="form-select" style="width:100px;font-size:13px;padding:4px 8px">
+                            <option value="user">私聊</option>
+                            <option value="group" selected>群聊</option>
+                            <option value="channel">频道</option>
+                            <option value="guild">服务器</option>
+                            <option value="thread">话题</option>
+                        </select>
+                        <input type="text" id="rf-nf-targetid" class="form-input" placeholder="目标 ID" style="flex:1;min-width:100px;font-size:13px;padding:4px 8px">
+                        <input type="text" id="rf-nf-accountid" class="form-input" placeholder="机器人账号(可选)" style="width:130px;font-size:13px;padding:4px 8px">
+                        <button class="btn btn-secondary btn-sm" onclick="rfAddNotifyTarget()">添加</button>
+                    </div>
+                    <div id="rf-notify-targets"></div>
+                </div>
+                <div class="rf-form-group">
+                    <label class="rf-label">自定义备注 <span style="color:var(--tx-t);font-weight:400">追加到通知末尾</span></label>
+                    <textarea id="rf-nf-custom" class="form-input" rows="2" style="width:100%;resize:vertical;font-size:13px" oninput="rfPreviewNotify()" placeholder="可选，会追加到模板内容下方"></textarea>
+                </div>
+                <div class="rf-form-group">
+                    <label class="rf-label">消息预览</label>
+                    <div id="rf-notify-preview" class="rf-notify-preview">加载中...</div>
+                </div>
+            </div>
+            <div id="rf-notify-history" style="display:none">
+                <div id="rf-history-list">
+                    <div style="text-align:center;padding:24px;color:var(--tx-t)">暂无发送记录</div>
+                </div>
+            </div>
+        </div>
+        <div class="rf-modal-footer">
+            <button class="btn btn-secondary" onclick="rfHideNotify()">取消</button>
+            <button class="btn btn-primary rf-notify-send-btn" onclick="rfSendNotify()" id="rf-notify-send-btn">发送</button>
+        </div>
+    </div>
+</div>
