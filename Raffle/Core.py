@@ -5,13 +5,23 @@ from pathlib import Path
 
 from ErisPulse import sdk
 from ErisPulse.Core.Bases import BaseModule
-from ErisPulse.Core.Event import command, message
+from ErisPulse.Core.Event import command, message, notice
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
 _MODULE_NAME = "Raffle"
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 9L12 2L4 9"/><path d="M12 2v14"/><circle cx="12" cy="20" r="2"/><path d="M4 20h4"/><path d="M16 20h4"/></svg>'
+
+_DEFAULT_PRIZE_CONFIG = {
+    "claim_keywords": ["兑奖", "我要兑奖", "领奖", "我要领奖"],
+    "claim_method": "info_collect",
+    "direct_content": "",
+    "per_user_content": {},
+    "collect_fields": [],
+    "custom_instructions": "",
+    "listen_friend_add": True,
+}
 
 _DEFAULT_SETTINGS = {
     "current_activity": None,
@@ -28,6 +38,12 @@ _DEFAULT_SETTINGS = {
         "pending": "{name}，你的参与申请已提交，等待管理员确认中。",
         "notify": "抽奖活动开始啦！\n\n活动名称：{activity_name}\n活动描述：{description}\n开奖人数：{draw_count} 人\n参与关键词：{keywords}\n\n快来参与吧！",
         "broadcast": "抽奖结果揭晓！\n活动：{activity_name}\n获奖者：{winner_names}\n恭喜以上 {winner_count} 位中奖者！",
+        "claim_prompt": "恭喜你中奖了！请回复「我要兑奖」来领取奖品。",
+        "claim_success": "{name}，你的兑奖信息已提交，我们会尽快处理！",
+        "claim_already": "{name}，你已经兑过奖了。",
+        "claim_not_winner": "抱歉，你不是本次活动的获奖者。",
+        "claim_no_prize": "当前没有需要兑奖的活动。",
+        "claim_friend": "检测到你是中奖者，以下是你的兑奖信息：",
     },
 }
 
@@ -46,6 +62,8 @@ class Main(BaseModule):
         self._ensure_settings()
         self._register_commands()
         self._register_message_handler()
+        self._register_claim_handler()
+        self._register_friend_add_handler()
         self._register_routes()
         self._register_dashboard_view()
         self.logger.info("Raffle 模块已加载")
@@ -281,6 +299,104 @@ class Main(BaseModule):
     def _save_whitelist(self, activity_id, whitelist):
         self.sdk.storage.set(f"raffle:whitelist:{activity_id}", whitelist)
 
+    def _get_claims(self, activity_id):
+        return self.sdk.storage.get(f"raffle:claims:{activity_id}", [])
+
+    def _save_claims(self, activity_id, claims):
+        self.sdk.storage.set(f"raffle:claims:{activity_id}", claims)
+
+    def _get_claim(self, activity_id, user_id):
+        claims = self._get_claims(activity_id)
+        for c in claims:
+            if c.get("user_id") == user_id:
+                return c
+        return None
+
+    def _save_claim(self, activity_id, claim):
+        claims = self._get_claims(activity_id)
+        for i, c in enumerate(claims):
+            if c.get("user_id") == claim["user_id"]:
+                claims[i] = claim
+                self._save_claims(activity_id, claims)
+                return
+        claims.append(claim)
+        self._save_claims(activity_id, claims)
+
+    def _find_winner_activities(self, user_id):
+        result = []
+        for act in self._get_all_activities():
+            if act.get("status") != "drawn":
+                continue
+            dr = act.get("draw_result")
+            if not dr or not dr.get("winners"):
+                continue
+            for w in dr["winners"]:
+                if w.get("user_id") == user_id:
+                    result.append(act)
+                    break
+        return result
+
+    async def _execute_claim_flow(self, event, activity, user_id, user_name, platform):
+        activity_id = activity["id"]
+        settings = self._get_settings()
+        tpl = settings.get("reply_templates", {})
+        existing = self._get_claim(activity_id, user_id)
+        if existing and existing.get("status") in ("claimed", "completed"):
+            await event.reply(tpl.get("claim_already", "").format(name=user_name))
+            return
+
+        prize_config = activity.get("prize_config", {})
+        claim_method = prize_config.get("claim_method", "info_collect")
+
+        if claim_method == "direct":
+            per_user = prize_config.get("per_user_content", {})
+            content = per_user.get(user_id, prize_config.get("direct_content", ""))
+            if not content:
+                content = prize_config.get("direct_content", "请联系管理员领取奖品")
+            await event.reply(content)
+            self._save_claim(activity_id, {
+                "user_id": user_id,
+                "user_name": user_name,
+                "platform": platform,
+                "status": "claimed",
+                "claimed_at": int(time.time()),
+                "data": {},
+            })
+            self.logger.info(f"用户 {user_name}({user_id}) 已兑奖(直接发送): {activity_id}")
+
+        elif claim_method == "info_collect":
+            fields = prize_config.get("collect_fields", [])
+            if not fields:
+                await event.reply("兑奖信息收集尚未配置，请联系管理员。")
+                return
+            data = await event.collect(fields, timeout_per_field=120)
+            if data:
+                self._save_claim(activity_id, {
+                    "user_id": user_id,
+                    "user_name": user_name,
+                    "platform": platform,
+                    "status": "claimed",
+                    "claimed_at": int(time.time()),
+                    "data": data,
+                })
+                await event.reply(tpl.get("claim_success", "").format(name=user_name))
+                self.logger.info(f"用户 {user_name}({user_id}) 已兑奖(信息收集): {activity_id}")
+            else:
+                await event.reply("兑奖已取消或超时，请重新发起。")
+
+        elif claim_method == "custom":
+            instructions = prize_config.get("custom_instructions", "请联系管理员领取奖品")
+            await event.reply(instructions)
+            self._save_claim(activity_id, {
+                "user_id": user_id,
+                "user_name": user_name,
+                "platform": platform,
+                "status": "claimed",
+                "claimed_at": int(time.time()),
+                "data": {},
+            })
+            self.logger.info(f"用户 {user_name}({user_id}) 已兑奖(自定义): {activity_id}")
+
     def _register_message_handler(self):
         @message.on_message()
         async def handle_raffle_message(event):
@@ -355,6 +471,70 @@ class Main(BaseModule):
                     activity_name=activity.get("name", "抽奖活动"),
                 ))
 
+    def _register_claim_handler(self):
+        @message.on_message(priority=20)
+        async def handle_claim_message(event):
+            text = event.get_text()
+            if not text:
+                return
+
+            user_id = event.get_user_id()
+            user_name = event.get_user_nickname() or "用户"
+            platform = event.get_platform()
+
+            winner_acts = self._find_winner_activities(user_id)
+            if not winner_acts:
+                return
+
+            matched_activities = []
+            for act in winner_acts:
+                pc = act.get("prize_config", {})
+                claim_kw = pc.get("claim_keywords", ["兑奖", "我要兑奖", "领奖"])
+                if any(kw in text for kw in claim_kw):
+                    matched_activities.append(act)
+
+            if not matched_activities:
+                return
+
+            settings = self._get_settings()
+            tpl = settings.get("reply_templates", {})
+
+            if len(matched_activities) == 1:
+                await self._execute_claim_flow(event, matched_activities[0], user_id, user_name, platform)
+            else:
+                options = [a.get("name", a["id"]) for a in matched_activities]
+                choice = await event.choose(
+                    tpl.get("claim_no_prize", "请选择要兑奖的活动："),
+                    options,
+                    timeout=60,
+                )
+                if choice is not None:
+                    await self._execute_claim_flow(event, matched_activities[choice], user_id, user_name, platform)
+
+    def _register_friend_add_handler(self):
+        @notice.on_friend_add()
+        async def handle_friend_add(event):
+            user_id = event.get_user_id()
+            user_name = event.get_user_nickname() or "用户"
+            platform = event.get_platform()
+
+            winner_acts = self._find_winner_activities(user_id)
+            if not winner_acts:
+                return
+
+            settings = self._get_settings()
+            tpl = settings.get("reply_templates", {})
+
+            for act in winner_acts:
+                pc = act.get("prize_config", {})
+                if not pc.get("listen_friend_add", True):
+                    continue
+                existing = self._get_claim(act["id"], user_id)
+                if existing and existing.get("status") in ("claimed", "completed"):
+                    continue
+                await event.reply(tpl.get("claim_friend", "").format(name=user_name))
+                await asyncio.sleep(0.5)
+
     def _verify_token(self, request: Request) -> bool:
         token = self._get_token(request)
         if not token:
@@ -397,6 +577,8 @@ class Main(BaseModule):
         r.register_http_route(mn, "/api/activities/{activity_id}/notify", handler=self._api_notify_send, methods=["POST"])
         r.register_http_route(mn, "/api/activities/{activity_id}/notify/history", handler=self._api_notify_history, methods=["GET"])
         r.register_http_route(mn, "/api/activities/{activity_id}/notify/resend/{history_id}", handler=self._api_notify_resend, methods=["POST"])
+        r.register_http_route(mn, "/api/activities/{activity_id}/claims", handler=self._api_claims_get, methods=["GET"])
+        r.register_http_route(mn, "/api/activities/{activity_id}/claims/{user_id}", handler=self._api_claims_update, methods=["PUT"])
 
     def _unregister_routes(self):
         r = self.sdk.router
@@ -414,6 +596,8 @@ class Main(BaseModule):
             "/api/activities/{activity_id}/notify",
             "/api/activities/{activity_id}/notify/history",
             "/api/activities/{activity_id}/notify/resend/{history_id}",
+            "/api/activities/{activity_id}/claims",
+            "/api/activities/{activity_id}/claims/{user_id}",
         ]:
             try:
                 r.unregister_http_route(mn, p)
@@ -466,12 +650,18 @@ class Main(BaseModule):
         if not self._verify_token(request):
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
         activities = self._get_all_activities()
+        for act in activities:
+            if "prize_config" not in act:
+                act["prize_config"] = dict(_DEFAULT_PRIZE_CONFIG)
         return JSONResponse({"activities": activities})
 
     async def _api_activities_create(self, request: Request) -> JSONResponse:
         if not self._verify_token(request):
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
-        body = await request.json()
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "Invalid JSON"}, status_code=400)
         activity_id = body.get("id", f"act_{int(time.time())}")
         activity = {
             "id": activity_id,
@@ -485,6 +675,7 @@ class Main(BaseModule):
             "status": "open",
             "created_at": int(time.time()),
             "draw_result": None,
+            "prize_config": {**_DEFAULT_PRIZE_CONFIG, **body.get("prize_config", {})},
         }
         self.sdk.storage.set(f"raffle:activity:{activity_id}", activity)
         activity_ids = self.sdk.storage.get("raffle:activities:list", [])
@@ -509,6 +700,8 @@ class Main(BaseModule):
         pending = self._get_participants(activity_id, "pending")
         activity["participant_count"] = len(confirmed)
         activity["pending_count"] = len(pending)
+        if "prize_config" not in activity:
+            activity["prize_config"] = dict(_DEFAULT_PRIZE_CONFIG)
         return JSONResponse({"activity": activity})
 
     async def _api_activities_update(self, request: Request) -> JSONResponse:
@@ -518,11 +711,17 @@ class Main(BaseModule):
         activity = self.sdk.storage.get(f"raffle:activity:{activity_id}")
         if not activity:
             return JSONResponse({"error": "活动不存在"}, status_code=404)
-        body = await request.json()
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "Invalid JSON"}, status_code=400)
         for key in ["name", "description", "draw_count", "keywords", "allowed_groups",
                      "status", "auto_confirm", "whitelist_mode"]:
             if key in body:
                 activity[key] = body[key]
+        if "prize_config" in body:
+            current_pc = activity.get("prize_config", {})
+            activity["prize_config"] = {**_DEFAULT_PRIZE_CONFIG, **current_pc, **body["prize_config"]}
         self.sdk.storage.set(f"raffle:activity:{activity_id}", activity)
         self.logger.info(f"活动已更新: {activity_id}")
         return JSONResponse({"success": True, "activity": activity})
@@ -856,3 +1055,45 @@ class Main(BaseModule):
             "success_count": success_count,
             "total_count": len(targets),
         })
+
+    async def _api_claims_get(self, request: Request) -> JSONResponse:
+        if not self._verify_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        activity_id = request.path_params.get("activity_id", "")
+        activity = self.sdk.storage.get(f"raffle:activity:{activity_id}")
+        if not activity:
+            return JSONResponse({"error": "活动不存在"}, status_code=404)
+        claims = self._get_claims(activity_id)
+        return JSONResponse({"claims": claims, "total": len(claims)})
+
+    async def _api_claims_update(self, request: Request) -> JSONResponse:
+        if not self._verify_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        activity_id = request.path_params.get("activity_id", "")
+        user_id = request.path_params.get("user_id", "")
+        activity = self.sdk.storage.get(f"raffle:activity:{activity_id}")
+        if not activity:
+            return JSONResponse({"error": "活动不存在"}, status_code=404)
+        body = await request.json()
+        action = body.get("action", "")
+
+        if action == "update_status":
+            claim = self._get_claim(activity_id, user_id)
+            if not claim:
+                return JSONResponse({"error": "兑奖记录不存在"}, status_code=404)
+            claim["status"] = body.get("status", claim["status"])
+            if body.get("admin_note"):
+                claim["admin_note"] = body["admin_note"]
+            self._save_claim(activity_id, claim)
+            return JSONResponse({"success": True, "claim": claim})
+
+        elif action == "update_per_user_content":
+            pc = activity.get("prize_config", {})
+            puc = pc.get("per_user_content", {})
+            puc[user_id] = body.get("content", "")
+            pc["per_user_content"] = puc
+            activity["prize_config"] = pc
+            self.sdk.storage.set(f"raffle:activity:{activity_id}", activity)
+            return JSONResponse({"success": True})
+
+        return JSONResponse({"error": "未知操作"}, status_code=400)

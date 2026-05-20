@@ -15,6 +15,9 @@ var _rfState = {
     notifyTargets: [],
     notifyActivityId: null,
     notifyHistory: [],
+    collectFields: [],
+    claims: [],
+    claimContentUserId: null,
 };
 
 function loadRaffleView() {
@@ -95,6 +98,10 @@ function rfLoadSettings() {
             if (elN) elN.value = tpl.notify || '';
             var elBC = document.getElementById('rf-tpl-broadcast');
             if (elBC) elBC.value = tpl.broadcast || '';
+            var elCS = document.getElementById('rf-tpl-claim-success');
+            if (elCS) elCS.value = tpl.claim_success || '';
+            var elCF = document.getElementById('rf-tpl-claim-friend');
+            if (elCF) elCF.value = tpl.claim_friend || '';
 
             if (_rfState.currentId) {
                 rfSelectActivity(_rfState.currentId);
@@ -146,6 +153,7 @@ function rfSelectActivity(id) {
     rfLoadParticipants(id);
     rfLoadBlacklist(id);
     rfLoadWhitelist(id);
+    rfLoadClaims();
 }
 
 function rfLoadActivityDetail(id) {
@@ -339,6 +347,15 @@ function rfShowCreate() {
     document.getElementById('rf-f-autoconfirm-label').textContent = '关闭';
     document.getElementById('rf-f-whitelist').checked = false;
     document.getElementById('rf-f-whitelist-label').textContent = '关闭';
+    _rfState.collectFields = [];
+    rfRenderCollectFields();
+    document.getElementById('rf-f-claim-method').value = 'info_collect';
+    rfClaimMethodChange();
+    document.getElementById('rf-f-direct-content').value = '';
+    document.getElementById('rf-f-custom-instructions').value = '';
+    document.getElementById('rf-f-claim-keywords').value = '兑奖,我要兑奖,领奖';
+    document.getElementById('rf-f-listen-friend').checked = true;
+    document.getElementById('rf-f-listen-friend-label').textContent = '开启';
     rfRenderGroupsList();
     document.getElementById('rf-create-panel').style.display = 'block';
 }
@@ -364,6 +381,16 @@ function rfEditActivity(id) {
     document.getElementById('rf-f-autoconfirm-label').textContent = act.auto_confirm ? '开启' : '关闭';
     document.getElementById('rf-f-whitelist').checked = !!act.whitelist_mode;
     document.getElementById('rf-f-whitelist-label').textContent = act.whitelist_mode ? '开启' : '关闭';
+    var pc = act.prize_config || {};
+    document.getElementById('rf-f-claim-method').value = pc.claim_method || 'info_collect';
+    rfClaimMethodChange();
+    _rfState.collectFields = (pc.collect_fields || []).slice();
+    rfRenderCollectFields();
+    document.getElementById('rf-f-direct-content').value = pc.direct_content || '';
+    document.getElementById('rf-f-custom-instructions').value = pc.custom_instructions || '';
+    document.getElementById('rf-f-claim-keywords').value = (pc.claim_keywords || []).join(',');
+    document.getElementById('rf-f-listen-friend').checked = pc.listen_friend_add !== false;
+    document.getElementById('rf-f-listen-friend-label').textContent = pc.listen_friend_add !== false ? '开启' : '关闭';
     rfRenderGroupsList();
     document.getElementById('rf-create-panel').style.display = 'block';
 }
@@ -412,6 +439,21 @@ function rfSaveActivity() {
     var keywords = keywordsStr ? keywordsStr.split(',').map(function(k) { return k.trim(); }).filter(Boolean) : [];
     var autoConfirm = document.getElementById('rf-f-autoconfirm').checked;
     var whitelistMode = document.getElementById('rf-f-whitelist').checked;
+    var claimMethod = document.getElementById('rf-f-claim-method').value;
+    var claimKeywordsStr = document.getElementById('rf-f-claim-keywords').value.trim();
+    var claimKeywords = claimKeywordsStr ? claimKeywordsStr.split(',').map(function(k) { return k.trim(); }).filter(Boolean) : [];
+    var directContent = document.getElementById('rf-f-direct-content').value;
+    var customInstructions = document.getElementById('rf-f-custom-instructions').value;
+    var listenFriend = document.getElementById('rf-f-listen-friend').checked;
+
+    var prizeConfig = {
+        claim_method: claimMethod,
+        claim_keywords: claimKeywords,
+        direct_content: directContent,
+        custom_instructions: customInstructions,
+        collect_fields: _rfState.collectFields.slice(),
+        listen_friend_add: listenFriend,
+    };
 
     if (!name) { alert('请输入活动名称'); return; }
 
@@ -423,6 +465,7 @@ function rfSaveActivity() {
             name: name, description: desc, draw_count: drawCount,
             keywords: keywords, allowed_groups: _rfState.tempGroups,
             auto_confirm: autoConfirm, whitelist_mode: whitelistMode,
+            prize_config: prizeConfig,
         });
     } else {
         url = '/Raffle/api/activities';
@@ -432,11 +475,15 @@ function rfSaveActivity() {
             draw_count: drawCount, keywords: keywords,
             allowed_groups: _rfState.tempGroups,
             auto_confirm: autoConfirm, whitelist_mode: whitelistMode,
+            prize_config: prizeConfig,
         });
     }
 
     fetch(url, { method: method, headers: _rfHeaders(), body: body })
-        .then(function(r) { return r.json(); })
+        .then(function(r) {
+            if (!r.ok) return r.text().then(function(t) { throw new Error(t || 'HTTP ' + r.status); });
+            return r.json();
+        })
         .then(function(d) {
             if (d.error) { alert('保存失败: ' + d.error); return; }
             rfHideCreate();
@@ -700,6 +747,8 @@ function rfSaveTemplates() {
         not_in_whitelist: document.getElementById('rf-tpl-notwhitelist').value,
         notify: document.getElementById('rf-tpl-notify').value,
         broadcast: document.getElementById('rf-tpl-broadcast').value,
+        claim_success: document.getElementById('rf-tpl-claim-success').value,
+        claim_friend: document.getElementById('rf-tpl-claim-friend').value,
     };
     fetch('/Raffle/api/settings', {
         method: 'PUT',
@@ -718,6 +767,141 @@ function rfEsc(str) {
     return d.innerHTML;
 }
 
+function rfClaimMethodChange() {
+    var method = document.getElementById('rf-f-claim-method').value;
+    document.getElementById('rf-claim-direct').style.display = method === 'direct_send' ? 'block' : 'none';
+    document.getElementById('rf-claim-collect').style.display = method === 'info_collect' ? 'block' : 'none';
+    document.getElementById('rf-claim-custom').style.display = method === 'custom' ? 'block' : 'none';
+}
+
+function rfAddCollectField() {
+    var key = document.getElementById('rf-cf-key').value.trim();
+    var prompt = document.getElementById('rf-cf-prompt').value.trim();
+    if (!key || !prompt) { alert('请填写字段标识和提示语'); return; }
+    if (_rfState.collectFields.some(function(f) { return f.key === key; })) { alert('字段标识已存在'); return; }
+    _rfState.collectFields.push({ key: key, prompt: prompt });
+    document.getElementById('rf-cf-key').value = '';
+    document.getElementById('rf-cf-prompt').value = '';
+    rfRenderCollectFields();
+}
+
+function rfRemoveCollectField(idx) {
+    _rfState.collectFields.splice(idx, 1);
+    rfRenderCollectFields();
+}
+
+function rfRenderCollectFields() {
+    var el = document.getElementById('rf-collect-fields-list');
+    if (!el) return;
+    if (_rfState.collectFields.length === 0) {
+        el.innerHTML = '<div style="font-size:12px;color:var(--tx-t)">暂未添加收集字段</div>';
+        return;
+    }
+    var html = '';
+    _rfState.collectFields.forEach(function(f, i) {
+        html += '<div style="display:flex;align-items:center;gap:8px;margin:4px 0;padding:4px 8px;background:var(--bg-s);border-radius:6px">';
+        html += '<span style="font-weight:600;font-size:13px">' + rfEsc(f.key) + '</span>';
+        html += '<span style="color:var(--tx-t);font-size:12px;flex:1">' + rfEsc(f.prompt) + '</span>';
+        html += '<button class="btn btn-icon btn-xs" onclick="rfRemoveCollectField(' + i + ')">';
+        html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+        html += '</button></div>';
+    });
+    el.innerHTML = html;
+}
+
+function rfLoadClaims() {
+    if (!_rfState.currentId) return;
+    fetch('/Raffle/api/activities/' + encodeURIComponent(_rfState.currentId) + '/claims', { headers: _rfHeaders() })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            _rfState.claims = d.claims || [];
+            rfRenderClaims();
+        })
+        .catch(function() { _rfState.claims = []; rfRenderClaims(); });
+}
+
+function rfRenderClaims() {
+    var empty = document.getElementById('rf-claims-empty');
+    var table = document.getElementById('rf-claims-table');
+    var body = document.getElementById('rf-claims-body');
+    if (!body) return;
+
+    if (_rfState.claims.length === 0) {
+        if (empty) empty.style.display = 'block';
+        if (table) table.style.display = 'none';
+        return;
+    }
+    if (empty) empty.style.display = 'none';
+    if (table) table.style.display = 'table';
+
+    var html = '';
+    _rfState.claims.forEach(function(c) {
+        var date = c.claimed_at ? new Date(c.claimed_at * 1000).toLocaleString() : '--';
+        var statusMap = { claimed: '已兑奖', completed: '已完成' };
+        var statusClass = c.status === 'completed' ? 'chip-ok' : 'chip-sc';
+        var methodMap = { direct_send: '直接发送', info_collect: '信息收集', custom: '自定义' };
+        var dataStr = '';
+        if (c.data && typeof c.data === 'object') {
+            dataStr = Object.keys(c.data).map(function(k) { return k + ': ' + c.data[k]; }).join(', ');
+        }
+        html += '<tr>';
+        html += '<td>' + rfEsc(c.user_name || '--') + '</td>';
+        html += '<td style="font-size:12px;font-family:monospace">' + rfEsc(c.user_id) + '</td>';
+        html += '<td><span class="chip chip-pr">' + rfEsc(c.platform || '--') + '</span></td>';
+        html += '<td style="font-size:12px">' + rfEsc(methodMap[c.method] || '--') + '</td>';
+        html += '<td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + rfEsc(dataStr) + '">' + rfEsc(dataStr || '--') + '</td>';
+        html += '<td><span class="chip ' + statusClass + '">' + rfEsc(statusMap[c.status] || c.status) + '</span></td>';
+        html += '<td style="font-size:12px;color:var(--tx-s)">' + date + '</td>';
+        html += '<td><div style="display:flex;gap:4px">';
+        if (c.status === 'claimed') {
+            html += '<button class="btn btn-primary btn-xs" onclick="rfUpdateClaimStatus(\'' + rfEsc(c.user_id) + '\', \'completed\')">完成</button>';
+        }
+        html += '<button class="btn btn-secondary btn-xs" onclick="rfShowClaimContent(\'' + rfEsc(c.user_id) + '\')">专属内容</button>';
+        html += '</div></td>';
+        html += '</tr>';
+    });
+    body.innerHTML = html;
+}
+
+function rfUpdateClaimStatus(userId, status) {
+    if (!_rfState.currentId) return;
+    fetch('/Raffle/api/activities/' + encodeURIComponent(_rfState.currentId) + '/claims/' + encodeURIComponent(userId), {
+        method: 'PUT', headers: _rfHeaders(),
+        body: JSON.stringify({ action: 'update_status', status: status })
+    })
+        .then(function(r) { return r.json(); })
+        .then(function() { rfLoadClaims(); })
+        .catch(function(e) { alert('操作失败: ' + e); });
+}
+
+function rfShowClaimContent(userId) {
+    _rfState.claimContentUserId = userId;
+    var act = _rfState.currentActivity;
+    var puc = (act && act.prize_config && act.prize_config.per_user_content) || {};
+    var el = document.getElementById('rf-cc-content');
+    if (el) el.value = puc[userId] || '';
+    var info = document.getElementById('rf-cc-user-info');
+    if (info) info.textContent = '用户: ' + userId;
+    document.getElementById('rf-claim-content-modal').style.display = 'flex';
+}
+
+function rfHideClaimContent() {
+    document.getElementById('rf-claim-content-modal').style.display = 'none';
+    _rfState.claimContentUserId = null;
+}
+
+function rfSaveClaimContent() {
+    if (!_rfState.currentId || !_rfState.claimContentUserId) return;
+    var content = document.getElementById('rf-cc-content').value;
+    fetch('/Raffle/api/activities/' + encodeURIComponent(_rfState.currentId) + '/claims/' + encodeURIComponent(_rfState.claimContentUserId), {
+        method: 'PUT', headers: _rfHeaders(),
+        body: JSON.stringify({ action: 'update_per_user_content', content: content })
+    })
+        .then(function(r) { return r.json(); })
+        .then(function() { rfHideClaimContent(); rfLoadActivityDetail(_rfState.currentId); })
+        .catch(function(e) { alert('保存失败: ' + e); });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     var acCb = document.getElementById('rf-f-autoconfirm');
     if (acCb) acCb.addEventListener('change', function() {
@@ -726,6 +910,10 @@ document.addEventListener('DOMContentLoaded', function() {
     var wlCb = document.getElementById('rf-f-whitelist');
     if (wlCb) wlCb.addEventListener('change', function() {
         document.getElementById('rf-f-whitelist-label').textContent = this.checked ? '开启' : '关闭';
+    });
+    var lfCb = document.getElementById('rf-f-listen-friend');
+    if (lfCb) lfCb.addEventListener('change', function() {
+        document.getElementById('rf-f-listen-friend-label').textContent = this.checked ? '开启' : '关闭';
     });
 });
 

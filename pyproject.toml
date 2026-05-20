@@ -1,6 +1,6 @@
 [project]
 name = "ErisPulse-Raffle"
-version = "1.0.0"
+version = "1.0.1"
 description = "通用抽奖模块 - 使用 Dashboard 可视化管理、群聊报名、开奖动画和广播通知"
 readme = "README.md"
 requires-python = ">=3.10"

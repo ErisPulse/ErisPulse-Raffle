@@ -90,6 +90,94 @@
                 </div>
                 <div id="rf-groups-list"></div>
             </div>
+            <div class="rf-form-group">
+                <label class="rf-label">兑奖方式</label>
+                <select id="rf-f-claim-method" class="form-select" style="width:200px" onchange="rfClaimMethodChange()">
+                    <option value="direct_send">直接发送内容</option>
+                    <option value="info_collect" selected>收集信息</option>
+                    <option value="custom">自定义说明</option>
+                </select>
+            </div>
+            <div id="rf-claim-direct" style="display:none">
+                <div class="rf-form-group">
+                    <label class="rf-label">发送内容 <span style="color:var(--tx-t);font-weight:400">直接发给中奖者</span></label>
+                    <textarea id="rf-f-direct-content" class="form-input" rows="3" style="width:100%;resize:vertical" placeholder="兑奖内容，将直接发送给中奖者"></textarea>
+                </div>
+            </div>
+            <div id="rf-claim-collect">
+                <div class="rf-form-group">
+                    <label class="rf-label">收集字段 <span style="color:var(--tx-t);font-weight:400">管理员自定义需要收集的信息</span></label>
+                    <div id="rf-collect-fields-list"></div>
+                    <div style="display:flex;gap:8px;margin-top:8px">
+                        <input type="text" id="rf-cf-key" class="form-input" placeholder="字段标识 (如 email)" style="flex:1">
+                        <input type="text" id="rf-cf-prompt" class="form-input" placeholder="提示语 (如 请输入邮箱)" style="flex:1">
+                        <button class="btn btn-secondary btn-sm" onclick="rfAddCollectField()">添加字段</button>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:20px" id="rf-claims-card">
+    <div class="card-header">
+        <span>兑奖记录</span>
+        <button class="btn btn-secondary btn-sm" onclick="rfLoadClaims()">刷新</button>
+    </div>
+    <div class="card-body">
+        <div id="rf-claims-empty" style="text-align:center;padding:24px;color:var(--tx-t)">请先开奖后查看兑奖记录</div>
+        <table id="rf-claims-table" class="rf-table" style="display:none;width:100%">
+            <thead>
+                <tr>
+                    <th>昵称</th>
+                    <th>用户 ID</th>
+                    <th>平台</th>
+                    <th>兑奖方式</th>
+                    <th>收集数据</th>
+                    <th>状态</th>
+                    <th>兑奖时间</th>
+                    <th style="width:140px">操作</th>
+                </tr>
+            </thead>
+            <tbody id="rf-claims-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<div id="rf-claim-content-modal" class="rf-modal" style="display:none">
+    <div class="rf-modal-overlay" onclick="rfHideClaimContent()"></div>
+    <div class="rf-modal-box" style="max-width:500px">
+        <div class="rf-modal-header">
+            <span>编辑用户专属内容</span>
+            <button class="btn btn-icon" onclick="rfHideClaimContent()" style="font-size:20px;padding:0 4px;line-height:1">×</button>
+        </div>
+        <div class="rf-modal-body">
+            <div style="font-size:13px;color:var(--tx-s);margin-bottom:8px" id="rf-cc-user-info">--</div>
+            <div class="rf-form-group">
+                <label class="rf-label">专属发送内容</label>
+                <textarea id="rf-cc-content" class="form-input" rows="4" style="width:100%;resize:vertical" placeholder="留空则使用默认内容"></textarea>
+            </div>
+        </div>
+        <div class="rf-modal-footer">
+            <button class="btn btn-secondary" onclick="rfHideClaimContent()">取消</button>
+            <button class="btn btn-primary" onclick="rfSaveClaimContent()">保存</button>
+        </div>
+    </div>
+</div>
+            </div>
+            <div id="rf-claim-custom" style="display:none">
+                <div class="rf-form-group">
+                    <label class="rf-label">自定义说明</label>
+                    <textarea id="rf-f-custom-instructions" class="form-input" rows="3" style="width:100%;resize:vertical" placeholder="兑奖时展示给中奖者的说明文字"></textarea>
+                </div>
+            </div>
+            <div class="rf-form-group">
+                <label class="rf-label">兑奖触发词 <span style="color:var(--tx-t);font-weight:400">(逗号分隔)</span></label>
+                <input type="text" id="rf-f-claim-keywords" class="form-input" placeholder="兑奖,我要兑奖,领奖" style="width:100%">
+            </div>
+            <div class="rf-form-group">
+                <label class="rf-label">监听好友添加 <span style="color:var(--tx-t);font-weight:400">(中奖者加好友时自动提醒)</span></label>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <label class="rf-switch"><input type="checkbox" id="rf-f-listen-friend" checked><span class="rf-switch-slider"></span></label>
+                    <span id="rf-f-listen-friend-label" style="font-size:13px;color:var(--tx-s)">开启</span>
+                </div>
+            </div>
             <div style="margin-top:12px">
                 <button class="btn btn-primary" onclick="rfSaveActivity()">保存活动</button>
             </div>
@@ -228,6 +316,19 @@
             <div class="rf-form-group">
                 <label class="rf-label">开奖广播模板 <span style="color:var(--tx-t);font-weight:400">变量: {activity_name}, {winner_names}, {winner_count}, {total_participants}</span></label>
                 <textarea id="rf-tpl-broadcast" class="form-input" rows="3" style="width:100%;resize:vertical"></textarea>
+            </div>
+        </div>
+        <div style="margin-top:16px">
+            <div style="font-size:14px;font-weight:600;margin-bottom:8px">兑奖模板</div>
+            <div class="grid-2">
+                <div class="rf-form-group">
+                    <label class="rf-label">兑奖成功 <span style="color:var(--tx-t);font-weight:400">变量: {name}</span></label>
+                    <textarea id="rf-tpl-claim-success" class="form-input" rows="2" style="width:100%;resize:vertical"></textarea>
+                </div>
+                <div class="rf-form-group">
+                    <label class="rf-label">好友添加提醒 <span style="color:var(--tx-t);font-weight:400">变量: {name}</span></label>
+                    <textarea id="rf-tpl-claim-friend" class="form-input" rows="2" style="width:100%;resize:vertical"></textarea>
+                </div>
             </div>
         </div>
         <div style="margin-top:12px">
