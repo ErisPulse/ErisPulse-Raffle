@@ -1,4 +1,22 @@
+<div align="center">
+
+<img src=".github/assets/ErisPulseLogo.png" width="180" alt="ErisPulse-Raffle" />
+
 # ErisPulse-Raffle
+
+**通用抽奖模块 —— Dashboard 可视化管理、关键词报名、开奖动画、兑奖系统。**
+
+<p>
+  <a href="https://pypi.org/project/ErisPulse-Raffle/"><img src="https://img.shields.io/pypi/v/ErisPulse-Raffle?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License"></a>
+  <a href="https://github.com/ErisPulse/ErisPulse-Raffle"><img src="https://img.shields.io/github/stars/ErisPulse/ErisPulse-Raffle?style=for-the-badge&logo=github&color=brightgreen" alt="Stars"></a>
+  <a href="https://pepy.tech/project/ErisPulse-Raffle"><img src="https://img.shields.io/pepy/dt/ErisPulse-Raffle?style=for-the-badge&color=blue" alt="Downloads"></a>
+  <a href="https://github.com/ErisPulse/ErisPulse"><img src="https://img.shields.io/badge/Powered_by-ErisPulse-FF6B9D?style=for-the-badge&logo=bookstack&logoColor=white" alt="ErisPulse"></a>
+</p>
+
+</div>
+
+---
 
 通用抽奖模块 - 基于 ErisPulse Dashboard 可视化管理，支持群聊关键词报名、开奖动画、广播通知、兑奖系统。
 
