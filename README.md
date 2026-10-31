@@ -6,7 +6,7 @@
 
 # ErisPulse-Raffle
 
-**General raffle module with Dashboard visualization, keyword signup & draw animation**
+**通用抽奖模块 — Dashboard 可视化管理、群聊关键词报名、开奖动画**
 
 <p>
   <a href="https://pypi.org/project/ErisPulse-Raffle/"><img src="https://img.shields.io/pypi/v/ErisPulse-Raffle?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI"></a>
